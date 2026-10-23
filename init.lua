@@ -25,8 +25,8 @@ local tall_sens = 0.006
 local home_path = os.getenv("HOME") .. "/"
 local pacem_path = home_path .. "mcsr/paceman-tracker-0.7.0.jar"
 local nb_path = home_path .. "mcsr/Ninjabrain-Bot-1.5.2.jar"
--- local overlay_path = home_path .. "mcsr/measuring_overlay.png"
 local overlay_path = home_path .. ".config/waywall/measuring_overlay.png"
+local nb_overlay_path = "/tmp/nb-overlay.png"
 
 
 -- ==== HELPERS ====
@@ -36,6 +36,7 @@ local is_ninb_running = function()
     handle:close()
     return result ~= nil
 end
+
 local is_pacem_running = function()
     local handle = io.popen("pgrep -f 'paceman..*'")
     local result = handle:read("*l")
@@ -80,13 +81,23 @@ local mirrors = {
     }),
 }
 
+
+-- ==== IMAGES ====
 local make_image = function(path, dst)
     local this = nil
 
     return function(enable)
-        if enable and not this then
+        if enable == nil then
+            -- Si no se pasa argumento, funciona como un toggle (alternar)
+            if this then
+                this:close()
+                this = nil
+            else
+                this = waywall.image(path, dst)
+            end
+        elseif enable and not this then
             this = waywall.image(path, dst)
-        elseif this and not enable then
+        elseif not enable and this then
             this:close()
             this = nil
         end
@@ -96,6 +107,12 @@ end
 local images = {
     measuring_overlay = make_image(overlay_path, {
         dst = { x = 0, y = 370, w = 790, h = 340 },
+    }),
+    
+    -- Overlay de Ninjabrain Bot leído desde /tmp/nb-overlay.png
+    -- NOTA: Puedes ajustar 'dst' (x, y, w, h) para cambiar su posición y tamaño en pantalla
+    ninb_overlay = make_image(nb_overlay_path, {
+        dst = { x = 10, y = 700, w = 380, h = 250 },
     }),
 }
 
@@ -118,6 +135,7 @@ local tall_enable = function()
     show_mirrors(false, true, false)
     waywall.set_sensitivity(tall_sens)
 end
+
 local wide_enable = function()
     show_mirrors(false, false, true)
     waywall.set_sensitivity(normal_sens)
@@ -169,17 +187,18 @@ local config = {
 }
 
 config.actions = {
-    
     [thin] = resolutions.thin,
     [tall] = resolutions.tall,
     [wide] = resolutions.wide,
 
     [toggle_ninbot] = function()
+        -- Si Ninjabrain Bot no está corriendo en segundo plano, lo ejecuta automáticamente
         if not is_ninb_running() then
-	    waywall.exec("java -jar ~/mcsr/Ninjabrain-Bot-1.5.2.jar")
-	    --waywall.exec("java -Dawt.useSystemAAFontSettings=on -jar " .. nb_path)
-            --waywall.show_floating(true)
+            waywall.exec("java -jar " .. nb_path)
         end
+
+        -- Muestra u oculta la imagen generada por Ninjabrain Bot (/tmp/nb-overlay.png)
+        images.ninb_overlay()
     end,
 
     [launch_paceman] = function()
