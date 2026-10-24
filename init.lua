@@ -82,13 +82,12 @@ local mirrors = {
 }
 
 
--- ==== IMAGES ====
+-- ==== AUTO-REFRESHING IMAGES ====
 local make_image = function(path, dst)
     local this = nil
 
     return function(enable)
         if enable == nil then
-            -- Si no se pasa argumento, funciona como un toggle (alternar)
             if this then
                 this:close()
                 this = nil
@@ -104,16 +103,48 @@ local make_image = function(path, dst)
     end
 end
 
+-- Generador de imagen con refresco dinámico automático para Ninjabrain Bot
+local make_auto_image = function(path, dst, interval_ms)
+    local this = nil
+    local timer = nil
+
+    local reload = function()
+        if this then
+            this:close()
+            this = waywall.image(path, dst)
+        end
+    end
+
+    return function(enable)
+        if enable == nil then
+            if this then
+                if timer then timer:cancel() timer = nil end
+                this:close()
+                this = nil
+            else
+                this = waywall.image(path, dst)
+                timer = waywall.timer(interval_ms, reload, true)
+            end
+        elseif enable and not this then
+            this = waywall.image(path, dst)
+            timer = waywall.timer(interval_ms, reload, true)
+        elseif not enable and this then
+            if timer then timer:cancel() timer = nil end
+            this:close()
+            this = nil
+        end
+    end
+end
+
 local images = {
     measuring_overlay = make_image(overlay_path, {
         dst = { x = 0, y = 370, w = 790, h = 340 },
     }),
     
-    -- Overlay de Ninjabrain Bot leído desde /tmp/nb-overlay.png
-    -- NOTA: Puedes ajustar 'dst' (x, y, w, h) para cambiar su posición y tamaño en pantalla
-    ninb_overlay = make_image(nb_overlay_path, {
-        dst = { x = 10, y = 700, w = 380, h = 250 },
-    }),
+    -- Se refresca en pantalla automáticamente cada 100ms si está encendido
+    ninb_overlay = make_auto_image(nb_overlay_path, {
+        dst = { x = 10, y = 10, w = 280, h = 150 },
+    }, 100),
 }
 
 local show_mirrors = function(thin, tall, wide)
@@ -192,12 +223,10 @@ config.actions = {
     [wide] = resolutions.wide,
 
     [toggle_ninbot] = function()
-        -- Si Ninjabrain Bot no está corriendo en segundo plano, lo ejecuta automáticamente
         if not is_ninb_running() then
-            waywall.exec("java -jar " .. nb_path)
+            waywall.exec("env DISPLAY=:0 java -jar " .. nb_path)
         end
 
-        -- Muestra u oculta la imagen generada por Ninjabrain Bot (/tmp/nb-overlay.png)
         images.ninb_overlay()
     end,
 
